@@ -1,0 +1,25 @@
+waypoints:
+    - position:
+        x: 0.0
+        y: 0.0
+        yaw: 0.0
+    - position:
+        x: 0.5
+        y: 0.5
+        yaw: 0.0
+    - position:
+        x: 1.5
+        y: -0.2
+        yaw: 0.0
+    - position:
+        x: 2.7
+        y: -0.6
+        yaw: 0.0
+    - position:
+        x: 4.0
+        y: 0.1
+        yaw: 0.0
+    - position:
+        x: 6.3
+        y: -0.4
+        yaw: 0.0

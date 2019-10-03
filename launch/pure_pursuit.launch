@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<launch>
+    <node name="pure_pursuit_node" pkg="pure_pursuit" type="pure_pursuit_node" output="screen">
+        <param name="input_path" value="spline_path"/>
+    </node>
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find cubic_spline_path)/rviz/rviz.rviz"/>
+</launch>

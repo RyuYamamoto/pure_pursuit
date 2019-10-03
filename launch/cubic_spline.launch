@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<launch>
+    <node name="cubic_spline_path_node" pkg="cubic_spline_path" type="cubic_spline_path_node">
+        <param name="waypoint_filename" value="$(find cubic_spline_path)/param/waypoint.yaml"/>
+    </node>
+    
+</launch>
