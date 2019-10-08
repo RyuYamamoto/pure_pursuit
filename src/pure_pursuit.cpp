@@ -58,13 +58,14 @@ void PurePursuit::run()
         {
             double look_ahead;
             // P制御による速度決定
-            _current_vel = _pid_vel_control(target_vel, _current_vel);
+            double ak = _pid_vel_control(target_vel, _current_vel);
+            ROS_INFO("current_vel: %f", _current_vel);
             double steering_angle = _calc_pure_pursuit(robot_pose, look_ahead);
             ROS_INFO("look ahead: %f", look_ahead);
-            robot_pose = _steering_control(robot_pose, _current_vel, steering_angle, look_ahead);
+            robot_pose = _steering_control(robot_pose, ak, steering_angle, look_ahead);
             _publish_marker(robot_pose);
+            _publish_tf(robot_pose);
             //ros::spinOnce();
-            ROS_INFO("end");
             rate.sleep();
         }
     }
@@ -79,7 +80,7 @@ void PurePursuit::_publish_marker(geometry_msgs::Pose pose) const
     marker.header.frame_id = "map";
     marker.header.stamp = ros::Time::now();
 
-    marker.scale.x = 0.3;
+    marker.scale.x = 1.0;
     marker.scale.y = 0.3;
     marker.scale.z = 0.3;
     marker.color.a = 1.0;
@@ -96,7 +97,21 @@ void PurePursuit::_publish_marker(geometry_msgs::Pose pose) const
 // tfを出力
 void PurePursuit::_publish_tf(geometry_msgs::Pose pose) const 
 {
+    tf2_ros::TransformBroadcaster br;
+    geometry_msgs::TransformStamped transformStamped;
 
+    transformStamped.header.stamp = ros::Time::now();
+    transformStamped.header.frame_id = "map";
+    transformStamped.child_frame_id = "robot";
+    transformStamped.transform.translation.x = pose.position.x;
+    transformStamped.transform.translation.y = pose.position.y;
+    transformStamped.transform.translation.z = pose.position.z;
+    transformStamped.transform.rotation.x = pose.orientation.x;
+    transformStamped.transform.rotation.y = pose.orientation.y;
+    transformStamped.transform.rotation.z = pose.orientation.z;
+    transformStamped.transform.rotation.w = pose.orientation.w;
+
+    br.sendTransform(transformStamped);
 }
 
 // pure pursuitによるステアリング角の決定
@@ -136,7 +151,7 @@ std::size_t PurePursuit::_plan_target_point(geometry_msgs::Pose pose, double &lo
     }
     std::vector<double>::iterator iter = std::min_element(distance.begin(), distance.end());
     std::size_t index = std::distance(distance.begin(), iter);
-    double look_ahead_filter = 0.1 * this->_current_vel + 0.3;
+    double look_ahead_filter = 0.1 * _current_vel + 0.3;
     look_ahead = 0.0;
     // look ahead distanceの更新
     while(look_ahead_filter > look_ahead && (index+1) < _ref_x.size())
