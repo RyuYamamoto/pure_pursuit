@@ -2,7 +2,7 @@
 
 PurePursuit::PurePursuit(ros::NodeHandle nh) 
     : _nh(nh),
-      _current_vel(0.0),
+      _current_vel(0.0),            
       _init_path(false)
 {
     ros::NodeHandle _pnh("~");
@@ -26,6 +26,7 @@ void PurePursuit::_set_path(const nav_msgs::PathConstPtr &msg)
         run();
     }
 }
+
 
 void PurePursuit::run()
 {
@@ -80,9 +81,9 @@ void PurePursuit::_publish_marker(geometry_msgs::Pose pose) const
     marker.header.frame_id = "map";
     marker.header.stamp = ros::Time::now();
 
-    marker.scale.x = 1.0;
-    marker.scale.y = 0.3;
-    marker.scale.z = 0.3;
+    marker.scale.x = 0.5;
+    marker.scale.y = 0.1;
+    marker.scale.z = 0.1;
     marker.color.a = 1.0;
     marker.color.r = 1.0;
     marker.color.g = 1.0;
@@ -124,7 +125,7 @@ double PurePursuit::_calc_pure_pursuit(geometry_msgs::Pose pose, double &look_ah
         ROS_INFO("%d",index);
         double yaw = _geometry_quat_to_rpy(pose.orientation);
         double alpha = std::atan2(_ref_y[index]-pose.position.y, _ref_x[index]-pose.position.x)-yaw;
-        double steering_angle = std::atan2(2.0*look_ahead*std::sin(alpha)/(3.0+0.1*_current_vel), 1.0);
+        double steering_angle = std::atan2(2.0*look_ahead*std::sin(alpha)/(0.3+0.1*_current_vel), 1.0);
         return steering_angle;
     }
     catch(std::exception& e)
