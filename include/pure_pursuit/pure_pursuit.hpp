@@ -13,6 +13,8 @@
 // TODO  シミュレーションのパターンを2通り考える
 // 1. ステアリングを切ったあとの位置を出力する場合(tfのみを出力)
 // 2. 速度を出力する場合(gazebo及び実機で検証))
+// 3. 停止制御の実装
+// 4. 旋回方向の速度の計算
 class PurePursuit
 {
 public:
@@ -23,6 +25,7 @@ private:
     void _set_path(const nav_msgs::PathConstPtr &msg);
     void _publish_marker(geometry_msgs::Pose pose) const;
     void _publish_tf(geometry_msgs::Pose pose) const;
+    void _publish_vel(double v, double w) const;
     double _calc_pure_pursuit(geometry_msgs::Pose pose, double &look_ahead);
     std::size_t _plan_target_point(geometry_msgs::Pose pose, double &look_ahead);
     geometry_msgs::Pose _steering_control(geometry_msgs::Pose pose, double vel, double angle, double look_ahead);
@@ -52,6 +55,8 @@ private:
     std::vector<double> _ref_x, _ref_y;
     double _current_vel;
     bool _init_path;
+    int _rate;
+    double _target_vel;
 
     std::string _output_vel;
     std::string _input_path;

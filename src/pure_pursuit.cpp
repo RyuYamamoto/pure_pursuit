@@ -6,9 +6,10 @@ PurePursuit::PurePursuit(ros::NodeHandle nh)
       _init_path(false)
 {
     ros::NodeHandle _pnh("~");
-
     _pnh.param<std::string>("output_vel", _output_vel, "/cmd_vel");
     _pnh.param<std::string>("input_path", _input_path, "/path");
+    _pnh.param<int>("rate", _rate, 10);
+    _pnh.param<double>("target_vel", _target_vel, 3.0);
 
     _pub_vel = _nh.advertise<geometry_msgs::Twist>(_output_vel, 10);
     _pub_marker = _nh.advertise<visualization_msgs::Marker>("/robot_marker", 10);
@@ -31,9 +32,9 @@ void PurePursuit::_set_path(const nav_msgs::PathConstPtr &msg)
 void PurePursuit::run()
 {
     {
-        ros::Rate rate(10);
+        ros::Rate rate(_rate);
         // 目標速度
-        double target_vel = 7.0;
+        double target_vel = _target_vel;
 
         // スプライン補間されたパスを格納する
         for(std::size_t index=0; index<_ref_path.poses.size();index++)
@@ -66,7 +67,7 @@ void PurePursuit::run()
             robot_pose = _steering_control(robot_pose, ak, steering_angle, look_ahead);
             _publish_marker(robot_pose);
             _publish_tf(robot_pose);
-            //ros::spinOnce();
+            _publish_vel(_current_vel, 0.0);
             rate.sleep();
         }
     }
@@ -93,6 +94,14 @@ void PurePursuit::_publish_marker(geometry_msgs::Pose pose) const
     marker.action = visualization_msgs::Marker::ADD;
     marker.pose = pose;
     _pub_marker.publish(marker);
+}
+
+void PurePursuit::_publish_vel(double v, double w) const
+{
+    geometry_msgs::Twist vel;
+    vel.linear.x = v;
+    vel.angular.z = w;
+    _pub_vel.publish(vel);
 }
 
 // tfを出力
@@ -122,7 +131,6 @@ double PurePursuit::_calc_pure_pursuit(geometry_msgs::Pose pose, double &look_ah
     {
         //double look_ahead;
         std::size_t index = _plan_target_point(pose, look_ahead);
-        ROS_INFO("%d",index);
         double yaw = _geometry_quat_to_rpy(pose.orientation);
         double alpha = std::atan2(_ref_y[index]-pose.position.y, _ref_x[index]-pose.position.x)-yaw;
         double steering_angle = std::atan2(2.0*look_ahead*std::sin(alpha)/(0.3+0.1*_current_vel), 1.0);
@@ -173,7 +181,7 @@ geometry_msgs::Pose PurePursuit::_steering_control(geometry_msgs::Pose pose, dou
     double yaw = _geometry_quat_to_rpy(pose.orientation);
     update_pose.position.x = pose.position.x + _current_vel*std::cos(yaw)*0.01;
     update_pose.position.y = pose.position.y + _current_vel*std::sin(yaw)*0.01;
-    yaw += (_current_vel/look_ahead)*std::tan(angle)*0.01;
+    yaw += (_current_vel/look_ahead)*std::tan(angle)*(0.01);
     _current_vel += vel*0.01;
     tf2::Quaternion quat;
     quat.setRPY(0.0,0.0,yaw);
