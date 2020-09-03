@@ -1,7 +1,7 @@
 #include <pure_pursuit/pure_pursuit.hpp>
 
-PurePursuit::PurePursuit(ros::NodeHandle nh)
-    : _nh(nh), _current_vel(0.0), _init_path(false) {
+PurePursuit::PurePursuit(ros::NodeHandle nh) : _nh(nh), _current_vel(0.0), _init_path(false)
+{
   ros::NodeHandle _pnh("~");
   _pnh.param<std::string>("output_vel", _output_vel, "/cmd_vel");
   _pnh.param<std::string>("input_path", _input_path, "/path");
@@ -13,7 +13,8 @@ PurePursuit::PurePursuit(ros::NodeHandle nh)
   _sub_path = _nh.subscribe(_input_path, 10, &PurePursuit::_set_path, this);
 }
 
-void PurePursuit::_set_path(const nav_msgs::PathConstPtr &msg) {
+void PurePursuit::_set_path(const nav_msgs::PathConstPtr & msg)
+{
   if (!_init_path) {
     _init_path = true;
     _ref_path.header.frame_id = msg->header.frame_id;
@@ -23,7 +24,8 @@ void PurePursuit::_set_path(const nav_msgs::PathConstPtr &msg) {
   }
 }
 
-void PurePursuit::run() {
+void PurePursuit::run()
+{
   {
     ros::Rate rate(_rate);
     // 目標速度
@@ -31,8 +33,8 @@ void PurePursuit::run() {
 
     // スプライン補間されたパスを格納する
     for (std::size_t index = 0; index < _ref_path.poses.size(); index++) {
-      ROS_INFO("%f %f", _ref_path.poses[index].pose.position.x,
-               _ref_path.poses[index].pose.position.y);
+      ROS_INFO(
+        "%f %f", _ref_path.poses[index].pose.position.x, _ref_path.poses[index].pose.position.y);
       _ref_x.push_back(_ref_path.poses[index].pose.position.x);
       _ref_y.push_back(_ref_path.poses[index].pose.position.y);
     }
@@ -56,8 +58,7 @@ void PurePursuit::run() {
       ROS_INFO("current_vel: %f", _current_vel);
       const double steering_angle = _calc_pure_pursuit(robot_pose, look_ahead);
       ROS_INFO("look ahead: %f", look_ahead);
-      robot_pose =
-          _steering_control(robot_pose, ak, steering_angle, look_ahead);
+      robot_pose = _steering_control(robot_pose, ak, steering_angle, look_ahead);
       _publish_marker(robot_pose);
       _publish_tf(robot_pose);
       _publish_vel(_current_vel, 0.0);
@@ -67,7 +68,8 @@ void PurePursuit::run() {
 }
 
 // ロボットの姿勢を出力
-void PurePursuit::_publish_marker(geometry_msgs::Pose pose) const {
+void PurePursuit::_publish_marker(geometry_msgs::Pose pose) const
+{
   visualization_msgs::Marker marker;
 
   marker.id = 0;
@@ -88,7 +90,8 @@ void PurePursuit::_publish_marker(geometry_msgs::Pose pose) const {
   _pub_marker.publish(marker);
 }
 
-void PurePursuit::_publish_vel(double v, double w) const {
+void PurePursuit::_publish_vel(double v, double w) const
+{
   geometry_msgs::Twist vel;
   vel.linear.x = v;
   vel.angular.z = w;
@@ -96,7 +99,8 @@ void PurePursuit::_publish_vel(double v, double w) const {
 }
 
 // tfを出力
-void PurePursuit::_publish_tf(geometry_msgs::Pose pose) const {
+void PurePursuit::_publish_tf(geometry_msgs::Pose pose) const
+{
   tf2_ros::TransformBroadcaster br;
   geometry_msgs::TransformStamped transformStamped;
 
@@ -115,24 +119,25 @@ void PurePursuit::_publish_tf(geometry_msgs::Pose pose) const {
 }
 
 // pure pursuitによるステアリング角の決定
-double PurePursuit::_calc_pure_pursuit(geometry_msgs::Pose pose,
-                                       double &look_ahead) {
+double PurePursuit::_calc_pure_pursuit(geometry_msgs::Pose pose, double & look_ahead)
+{
   try {
     // double look_ahead;
     std::size_t index = _plan_target_point(pose, look_ahead);
     double yaw = _geometry_quat_to_rpy(pose.orientation);
-    double alpha = std::atan2(_ref_y[index] - pose.position.y,
-                              _ref_x[index] - pose.position.x) -
-                   yaw;
-    double steering_angle = std::atan2(
-        2.0 * look_ahead * std::sin(alpha) / (0.3 + 0.1 * _current_vel), 1.0);
+    double alpha =
+      std::atan2(_ref_y[index] - pose.position.y, _ref_x[index] - pose.position.x) - yaw;
+    double steering_angle =
+      std::atan2(2.0 * look_ahead * std::sin(alpha) / (0.3 + 0.1 * _current_vel), 1.0);
     return steering_angle;
-  } catch (std::exception &e) { std::cerr << e.what() << std::endl; }
+  } catch (std::exception & e) {
+    std::cerr << e.what() << std::endl;
+  }
 }
 
 // look ahead distanceの更新とターゲット位置を取得
-std::size_t PurePursuit::_plan_target_point(geometry_msgs::Pose pose,
-                                            double &look_ahead) {
+std::size_t PurePursuit::_plan_target_point(geometry_msgs::Pose pose, double & look_ahead)
+{
   std::vector<double> dx, dy;
 
   for (std::size_t index = 0; index < _ref_x.size(); index++) {
@@ -141,12 +146,10 @@ std::size_t PurePursuit::_plan_target_point(geometry_msgs::Pose pose,
   }
   std::vector<double> distance;
   for (std::size_t index = 0; index < dx.size(); index++) {
-    const double dist =
-        std::abs(std::sqrt(dx[index] * dx[index] + dy[index] * dy[index]));
+    const double dist = std::abs(std::sqrt(dx[index] * dx[index] + dy[index] * dy[index]));
     distance.push_back(dist);
   }
-  std::vector<double>::iterator iter =
-      std::min_element(distance.begin(), distance.end());
+  std::vector<double>::iterator iter = std::min_element(distance.begin(), distance.end());
   std::size_t index = std::distance(distance.begin(), iter);
   const double look_ahead_filter = 0.1 * _current_vel + 0.3;
   look_ahead = 0.0;
@@ -161,16 +164,14 @@ std::size_t PurePursuit::_plan_target_point(geometry_msgs::Pose pose,
 }
 
 // 現在位置と速度、ステアンリング各からt+1後のロボットの位置を計算する
-geometry_msgs::Pose PurePursuit::_steering_control(geometry_msgs::Pose pose,
-                                                   double vel, double angle,
-                                                   double look_ahead) {
+geometry_msgs::Pose PurePursuit::_steering_control(
+  geometry_msgs::Pose pose, double vel, double angle, double look_ahead)
+{
   geometry_msgs::Pose update_pose = pose;
   // 現在姿勢からyaw軸の姿勢を取得
   double yaw = _geometry_quat_to_rpy(pose.orientation);
-  update_pose.position.x =
-      pose.position.x + _current_vel * std::cos(yaw) * 0.01;
-  update_pose.position.y =
-      pose.position.y + _current_vel * std::sin(yaw) * 0.01;
+  update_pose.position.x = pose.position.x + _current_vel * std::cos(yaw) * 0.01;
+  update_pose.position.y = pose.position.y + _current_vel * std::sin(yaw) * 0.01;
   yaw += (_current_vel / look_ahead) * std::tan(angle) * (0.01);
   _current_vel += vel * 0.01;
   tf2::Quaternion quat;

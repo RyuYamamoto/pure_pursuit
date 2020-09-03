@@ -15,25 +15,28 @@
 // 2. 速度を出力する場合(gazebo及び実機で検証))
 // 3. 停止制御の実装
 // 4. 旋回方向の速度の計算
-class PurePursuit {
+class PurePursuit
+{
 public:
   PurePursuit(ros::NodeHandle nh);
   ~PurePursuit() {}
   void run();
 
 private:
-  void _set_path(const nav_msgs::PathConstPtr &msg);
+  void _set_path(const nav_msgs::PathConstPtr & msg);
   void _publish_marker(geometry_msgs::Pose pose) const;
   void _publish_tf(geometry_msgs::Pose pose) const;
   void _publish_vel(double v, double w) const;
-  double _calc_pure_pursuit(geometry_msgs::Pose pose, double &look_ahead);
-  std::size_t _plan_target_point(geometry_msgs::Pose pose, double &look_ahead);
-  geometry_msgs::Pose _steering_control(geometry_msgs::Pose pose, double vel,
-                                        double angle, double look_ahead);
-  inline double _pid_vel_control(double target_vel, double current_vel) {
+  double _calc_pure_pursuit(geometry_msgs::Pose pose, double & look_ahead);
+  std::size_t _plan_target_point(geometry_msgs::Pose pose, double & look_ahead);
+  geometry_msgs::Pose _steering_control(
+    geometry_msgs::Pose pose, double vel, double angle, double look_ahead);
+  inline double _pid_vel_control(double target_vel, double current_vel)
+  {
     return 1 * (target_vel - current_vel);
   }
-  double _geometry_quat_to_rpy(geometry_msgs::Quaternion quat) {
+  double _geometry_quat_to_rpy(geometry_msgs::Quaternion quat)
+  {
     double roll, pitch, yaw;
     tf2::Quaternion tf_quat;
     tf_quat.setW(quat.w);
