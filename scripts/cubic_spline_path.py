@@ -10,6 +10,7 @@ import yaml
 import numpy as np
 from scipy.interpolate import interp1d
 
+
 def interpolation(waypoint_list, alg="cubic"):
     ix = iy = []
 
@@ -22,15 +23,16 @@ def interpolation(waypoint_list, alg="cubic"):
         cubic_spline = interp1d(temp_x, temp_y)
     elif alg == "cubic":
         cubic_spline = interp1d(temp_x, temp_y, kind='cubic')
-    
+
     waypoint_x_start = temp_x[0]
     waypoint_x_end = temp_x[-1]
-    length =  (int)(abs(waypoint_x_end - waypoint_x_start)/0.01)
+    length = (int)(abs(waypoint_x_end - waypoint_x_start)/0.01)
     print length
-    ix = np.linspace(waypoint_x_start, waypoint_x_end , num=length)
+    ix = np.linspace(waypoint_x_start, waypoint_x_end, num=length)
     iy = cubic_spline(ix)
 
     return ix, iy
+
 
 if __name__ == '__main__':
     rospy.init_node("cubic_spline_path")
@@ -58,4 +60,3 @@ if __name__ == '__main__':
         path_pub.publish(path)
         rate.sleep()
     rospy.spin()
-    
