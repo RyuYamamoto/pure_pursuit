@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<launch>
+	<node name="cubic_spline_path" exec="cubic_spline_path.py" pkg="pure_pursuit" output="screen">
+		<param name="filename" value="$(find-pkg-share pure_pursuit)/param/waypoint.yaml"/>
+	</node>
+
+	<node name="pure_pursuit_node" pkg="pure_pursuit" exec="pure_pursuit_node" output="screen">
+		<param name="rate" value="0.1"/>
+		<param name="target_vel" value="0.5"/>
+		<remap from="path" to="spline_path"/>
+	</node>
+	<node name="rviz2" pkg="rviz2" exec="rviz2"/>
+
+</launch>

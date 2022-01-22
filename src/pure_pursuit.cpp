@@ -1,80 +1,61 @@
-#include <pure_pursuit/pure_pursuit.hpp>
+#include "pure_pursuit/pure_pursuit.hpp"
 
-PurePursuit::PurePursuit(ros::NodeHandle nh) : _nh(nh), _current_vel(0.0), _init_path(false)
+PurePursuit::PurePursuit() : Node("pure_pursuit")
 {
-  ros::NodeHandle _pnh("~");
-  _pnh.param<std::string>("output_vel", _output_vel, "/cmd_vel");
-  _pnh.param<std::string>("input_path", _input_path, "/path");
-  _pnh.param<int>("rate", _rate, 10);
-  _pnh.param<double>("target_vel", _target_vel, 3.0);
+  period_ = this->declare_parameter("period", 0.01);
+  target_vel_ = this->declare_parameter("target_vel", 3.0);
 
-  _pub_vel = _nh.advertise<geometry_msgs::Twist>(_output_vel, 10);
-  _pub_marker = _nh.advertise<visualization_msgs::Marker>("/robot_marker", 10);
-  _sub_path = _nh.subscribe(_input_path, 10, &PurePursuit::_set_path, this);
+  velocity_publisher_ = this->create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
+  marker_publisher_ = this->create_publisher<visualization_msgs::msg::Marker>("robot_marker", 10);
+  path_subscriber_ = this->create_subscription<nav_msgs::msg::Path>(
+    "path", rclcpp::QoS{1}.transient_local(),
+    std::bind(&PurePursuit::setPath, this, std::placeholders::_1));
+
+  broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+
+  timer_ = this->create_wall_timer(
+    std::chrono::milliseconds(static_cast<int>(1000 * period_)),
+    std::bind(&PurePursuit::timerCallback, this));
 }
 
-void PurePursuit::_set_path(const nav_msgs::PathConstPtr & msg)
+void PurePursuit::setPath(const nav_msgs::msg::Path & msg)
 {
-  if (!_init_path) {
-    _init_path = true;
-    _ref_path.header.frame_id = msg->header.frame_id;
-    _ref_path.header.stamp = msg->header.stamp;
-    _ref_path.poses = msg->poses;
-    run();
+  if (!init_path_) {
+    init_path_ = true;
+    ref_path_.header.frame_id = msg.header.frame_id;
+    ref_path_.header.stamp = msg.header.stamp;
+    ref_path_.poses = msg.poses;
+  }
+
+  for (auto pose : ref_path_.poses) {
+    ref_x_.emplace_back(pose.pose.position.x);
+    ref_y_.emplace_back(pose.pose.position.y);
   }
 }
 
-void PurePursuit::run()
+void PurePursuit::timerCallback()
 {
-  {
-    ros::Rate rate(_rate);
-    // 目標速度
-    double target_vel = _target_vel;
-
-    // スプライン補間されたパスを格納する
-    for (std::size_t index = 0; index < _ref_path.poses.size(); index++) {
-      ROS_INFO(
-        "%f %f", _ref_path.poses[index].pose.position.x, _ref_path.poses[index].pose.position.y);
-      _ref_x.push_back(_ref_path.poses[index].pose.position.x);
-      _ref_y.push_back(_ref_path.poses[index].pose.position.y);
-    }
-
-    geometry_msgs::Pose robot_pose;
-    robot_pose.position.x = 0.0;
-    robot_pose.position.y = 0.0;
-    robot_pose.position.z = 0.0;
-    tf2::Quaternion q;
-    q.setRPY(0.0, 0.0, 0.0);
-    robot_pose.orientation.w = q.w();
-    robot_pose.orientation.x = q.x();
-    robot_pose.orientation.y = q.y();
-    robot_pose.orientation.z = q.z();
-
-    // メイン処理
-    while (1) {
-      double look_ahead;
-      // P制御による速度決定
-      const double ak = _pid_vel_control(target_vel, _current_vel);
-      ROS_INFO("current_vel: %f", _current_vel);
-      const double steering_angle = _calc_pure_pursuit(robot_pose, look_ahead);
-      ROS_INFO("look ahead: %f", look_ahead);
-      robot_pose = _steering_control(robot_pose, ak, steering_angle, look_ahead);
-      _publish_marker(robot_pose);
-      _publish_tf(robot_pose);
-      _publish_vel(_current_vel, 0.0);
-      rate.sleep();
-    }
+  if (!init_path_) {
+    RCLCPP_ERROR(get_logger(), "Not Found Path.");
+    return;
   }
+  double look_ahead;
+  const double ak = pidVelocityControl(target_vel_, current_vel_);
+  const double steering_angle = calcPurePursuit(current_pose_, look_ahead);
+  current_pose_ = steeringControl(current_pose_, ak, steering_angle, look_ahead);
+  publishMarker(current_pose_);
+  publishTF(current_pose_);
+  publishVelocity(current_vel_, 0.0);
 }
 
 // ロボットの姿勢を出力
-void PurePursuit::_publish_marker(geometry_msgs::Pose pose) const
+void PurePursuit::publishMarker(geometry_msgs::msg::Pose pose) const
 {
-  visualization_msgs::Marker marker;
+  visualization_msgs::msg::Marker marker;
 
   marker.id = 0;
   marker.header.frame_id = "map";
-  marker.header.stamp = ros::Time::now();
+  marker.header.stamp = rclcpp::Clock().now();
 
   marker.scale.x = 0.5;
   marker.scale.y = 0.1;
@@ -84,29 +65,28 @@ void PurePursuit::_publish_marker(geometry_msgs::Pose pose) const
   marker.color.g = 1.0;
   marker.color.b = 1.0;
   marker.ns = "robot";
-  marker.type = visualization_msgs::Marker::ARROW;
-  marker.action = visualization_msgs::Marker::ADD;
+  marker.type = visualization_msgs::msg::Marker::ARROW;
+  marker.action = visualization_msgs::msg::Marker::ADD;
   marker.pose = pose;
-  _pub_marker.publish(marker);
+  marker_publisher_->publish(marker);
 }
 
-void PurePursuit::_publish_vel(double v, double w) const
+void PurePursuit::publishVelocity(double v, double w) const
 {
-  geometry_msgs::Twist vel;
+  geometry_msgs::msg::Twist vel;
   vel.linear.x = v;
   vel.angular.z = w;
-  _pub_vel.publish(vel);
+  velocity_publisher_->publish(vel);
 }
 
 // tfを出力
-void PurePursuit::_publish_tf(geometry_msgs::Pose pose) const
+void PurePursuit::publishTF(geometry_msgs::msg::Pose pose) const
 {
-  tf2_ros::TransformBroadcaster br;
-  geometry_msgs::TransformStamped transformStamped;
+  geometry_msgs::msg::TransformStamped transformStamped;
 
-  transformStamped.header.stamp = ros::Time::now();
+  transformStamped.header.stamp = rclcpp::Clock().now();
   transformStamped.header.frame_id = "map";
-  transformStamped.child_frame_id = "robot";
+  transformStamped.child_frame_id = "base_link";
   transformStamped.transform.translation.x = pose.position.x;
   transformStamped.transform.translation.y = pose.position.y;
   transformStamped.transform.translation.z = pose.position.z;
@@ -115,34 +95,30 @@ void PurePursuit::_publish_tf(geometry_msgs::Pose pose) const
   transformStamped.transform.rotation.z = pose.orientation.z;
   transformStamped.transform.rotation.w = pose.orientation.w;
 
-  br.sendTransform(transformStamped);
+  broadcaster_->sendTransform(transformStamped);
 }
 
 // pure pursuitによるステアリング角の決定
-double PurePursuit::_calc_pure_pursuit(geometry_msgs::Pose pose, double & look_ahead)
+double PurePursuit::calcPurePursuit(geometry_msgs::msg::Pose pose, double & look_ahead)
 {
-  try {
-    // double look_ahead;
-    std::size_t index = _plan_target_point(pose, look_ahead);
-    double yaw = _geometry_quat_to_rpy(pose.orientation);
-    double alpha =
-      std::atan2(_ref_y[index] - pose.position.y, _ref_x[index] - pose.position.x) - yaw;
-    double steering_angle =
-      std::atan2(2.0 * look_ahead * std::sin(alpha) / (0.3 + 0.1 * _current_vel), 1.0);
-    return steering_angle;
-  } catch (std::exception & e) {
-    std::cerr << e.what() << std::endl;
-  }
+  // double look_ahead;
+  std::size_t index = planTargetPoint(pose, look_ahead);
+  const double yaw = quaternionToYaw(pose.orientation);
+  const double alpha =
+    std::atan2(ref_y_[index] - pose.position.y, ref_x_[index] - pose.position.x) - yaw;
+  const double steering_angle =
+    std::atan2(2.0 * look_ahead * std::sin(alpha) / (0.3 + 0.1 * current_vel_), 1.0);
+  return steering_angle;
 }
 
 // look ahead distanceの更新とターゲット位置を取得
-std::size_t PurePursuit::_plan_target_point(geometry_msgs::Pose pose, double & look_ahead)
+std::size_t PurePursuit::planTargetPoint(geometry_msgs::msg::Pose pose, double & look_ahead)
 {
   std::vector<double> dx, dy;
 
-  for (std::size_t index = 0; index < _ref_x.size(); index++) {
-    dx.push_back(pose.position.x - _ref_x[index]);
-    dy.push_back(pose.position.y - _ref_y[index]);
+  for (std::size_t index = 0; index < ref_x_.size(); index++) {
+    dx.push_back(pose.position.x - ref_x_[index]);
+    dy.push_back(pose.position.y - ref_y_[index]);
   }
   std::vector<double> distance;
   for (std::size_t index = 0; index < dx.size(); index++) {
@@ -151,12 +127,12 @@ std::size_t PurePursuit::_plan_target_point(geometry_msgs::Pose pose, double & l
   }
   std::vector<double>::iterator iter = std::min_element(distance.begin(), distance.end());
   std::size_t index = std::distance(distance.begin(), iter);
-  const double look_ahead_filter = 0.1 * _current_vel + 0.3;
+  const double look_ahead_filter = 0.1 * current_vel_ + 0.3;
   look_ahead = 0.0;
   // look ahead distanceの更新
-  while (look_ahead_filter > look_ahead && (index + 1) < _ref_x.size()) {
-    const double d_x = _ref_x[index + 1] - _ref_x[index];
-    const double d_y = _ref_y[index + 1] - _ref_y[index];
+  while (look_ahead_filter > look_ahead && (index + 1) < ref_x_.size()) {
+    const double d_x = ref_x_[index + 1] - ref_x_[index];
+    const double d_y = ref_y_[index + 1] - ref_y_[index];
     look_ahead += std::sqrt(d_x * d_x + d_y * d_y);
     index += 1;
   }
@@ -164,16 +140,16 @@ std::size_t PurePursuit::_plan_target_point(geometry_msgs::Pose pose, double & l
 }
 
 // 現在位置と速度、ステアンリング各からt+1後のロボットの位置を計算する
-geometry_msgs::Pose PurePursuit::_steering_control(
-  geometry_msgs::Pose pose, double vel, double angle, double look_ahead)
+geometry_msgs::msg::Pose PurePursuit::steeringControl(
+  geometry_msgs::msg::Pose pose, double vel, double angle, double look_ahead)
 {
-  geometry_msgs::Pose update_pose = pose;
+  geometry_msgs::msg::Pose update_pose = pose;
   // 現在姿勢からyaw軸の姿勢を取得
-  double yaw = _geometry_quat_to_rpy(pose.orientation);
-  update_pose.position.x = pose.position.x + _current_vel * std::cos(yaw) * 0.01;
-  update_pose.position.y = pose.position.y + _current_vel * std::sin(yaw) * 0.01;
-  yaw += (_current_vel / look_ahead) * std::tan(angle) * (0.01);
-  _current_vel += vel * 0.01;
+  double yaw = quaternionToYaw(pose.orientation);
+  update_pose.position.x = pose.position.x + current_vel_ * std::cos(yaw) * 0.01;
+  update_pose.position.y = pose.position.y + current_vel_ * std::sin(yaw) * 0.01;
+  yaw += (current_vel_ / look_ahead) * std::tan(angle) * (0.01);
+  current_vel_ += vel * 0.01;
   tf2::Quaternion quat;
   quat.setRPY(0.0, 0.0, yaw);
   update_pose.orientation.w = quat.w();

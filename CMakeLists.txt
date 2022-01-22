@@ -1,26 +1,27 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.5)
 project(pure_pursuit)
 
-find_package(catkin REQUIRED COMPONENTS
-  geometry_msgs
-  nav_msgs
-  visualization_msgs
-  roscpp
-  tf2
-  tf2_ros
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 14)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(CMAKE_CXX_EXTENSIONS OFF)
+endif()
+if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+endif()
+
+find_package(ament_cmake_auto REQUIRED)
+ament_auto_find_build_dependencies()
+
+ament_auto_add_executable(pure_pursuit_node
+  src/pure_pursuit_node.cpp
+  src/pure_pursuit.cpp
 )
 
-catkin_package(
-  INCLUDE_DIRS include
-#  LIBRARIES pure_pursuit
-#  CATKIN_DEPENDS geometry_msgs roscpp tf2 tf2_ros
-#  DEPENDS system_lib
-)
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  ament_lint_auto_find_test_dependencies()
+endif()
+ament_auto_package(INSTALL_TO_SHARE launch param rviz)
 
-include_directories(
-  include
-  ${catkin_INCLUDE_DIRS}
-)
-
-add_executable(pure_pursuit_node src/pure_pursuit.cpp src/pure_pursuit_node.cpp)
-target_link_libraries(pure_pursuit_node ${catkin_LIBRARIES})
+install(PROGRAMS scripts/cubic_spline_path.py DESTINATION lib/${PROJECT_NAME})
